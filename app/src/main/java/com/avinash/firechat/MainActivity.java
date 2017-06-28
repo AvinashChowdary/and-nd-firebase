@@ -1,6 +1,7 @@
 package com.avinash.firechat;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
@@ -19,6 +20,7 @@ import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.firebase.ui.auth.AuthUI;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.ChildEventListener;
@@ -26,6 +28,9 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
 
     public static final String ANONYMOUS = "anonymous";
     public static final int DEFAULT_MSG_LENGTH_LIMIT = 1000;
+    private static final int RC_PHOTO_PICKER = 123;
 
     private ListView mMessageListView;
     private MessageAdapter mMessageAdapter;
@@ -52,6 +58,8 @@ public class MainActivity extends AppCompatActivity {
     private ChildEventListener mChildEventListener;
     private FirebaseAuth mFirebaseAuth;
     private FirebaseAuth.AuthStateListener mAuthStateListener;
+    private FirebaseStorage mFirebaseStorage;
+    private StorageReference mChatPhotoStorageReference;
     private static final int RC_SIGN_IN = 122;
 
     @Override
@@ -66,6 +74,9 @@ public class MainActivity extends AppCompatActivity {
         mMessagesDatabaseReference = mFirebaseDatabase.getReference().child("messages");
 
         mFirebaseAuth = FirebaseAuth.getInstance();
+
+        mFirebaseStorage = FirebaseStorage.getInstance();
+        mChatPhotoStorageReference = mFirebaseStorage.getReference().child("chat_photos");
 
         // Initialize references to views
         mProgressBar = (ProgressBar) findViewById(R.id.progressBar);
@@ -145,6 +156,16 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         };
+
+        mPhotoPickerButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.setType("image/jpeg");
+                intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+                startActivityForResult(Intent.createChooser(intent, "Complete action using"), RC_PHOTO_PICKER);
+            }
+        });
     }
 
     @Override
@@ -157,6 +178,18 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(MainActivity.this, "Sign In Cancelled!", Toast.LENGTH_LONG).show();
                 finish();
             }
+        }
+        if(requestCode == RC_PHOTO_PICKER && resultCode == RESULT_OK) {
+            final Uri selectedImageUri = data.getData();
+            StorageReference photoRef = mChatPhotoStorageReference.child(selectedImageUri.getLastPathSegment());
+            photoRef.putFile(selectedImageUri).addOnSuccessListener(this, new OnSuccessListener<UploadTask.TaskSnapshot>() {
+                @Override
+                public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
+                    Uri imgUrl = taskSnapshot.getDownloadUrl();
+                    FriendlyMessage friendlyMessage = new FriendlyMessage(null, mUsername, imgUrl.toString());
+                    mMessagesDatabaseReference.push().setValue(friendlyMessage);
+                }
+            });
         }
     }
 
